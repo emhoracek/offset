@@ -4,25 +4,25 @@
 
 module Snap.Snaplet.Wordpress.Splices where
 
-import           Control.Lens                       hiding (children)
-import           Data.Aeson                         hiding (decode, encode)
-import qualified Data.Attoparsec.Text               as A
-import           Data.Char                          (toUpper)
-import qualified Data.HashMap.Strict                as M
-import           Data.IntSet                        (IntSet)
-import qualified Data.IntSet                        as IntSet
+import           Control.Lens                    hiding (children)
+import           Data.Aeson                      hiding (decode, encode)
+import qualified Data.Attoparsec.Text            as A
+import           Data.Char                       (toUpper)
+import qualified Data.HashMap.Strict             as M
+import           Data.IntSet                     (IntSet)
+import qualified Data.IntSet                     as IntSet
 import           Data.Map.Syntax
-import           Data.Maybe                         (fromJust, fromMaybe)
+import           Data.Maybe                      (fromJust, fromMaybe)
 import           Data.Monoid
-import qualified Data.Set                           as Set
-import           Data.Text                          (Text)
-import qualified Data.Text                          as T
-import qualified Data.Vector                        as V
+import qualified Data.Set                        as Set
+import           Data.Text                       (Text)
+import qualified Data.Text                       as T
+import qualified Data.Vector                     as V
 import           Heist
 import           Heist.Compiled
 import           Heist.Compiled.LowLevel
-import           Snap                               hiding (path, rqURI)
-import qualified Text.XmlHtml                       as X
+import           Snap                            hiding (path, rqURI)
+import qualified Text.XmlHtml                    as X
 
 import           Snap.Snaplet.Wordpress.Field
 import           Snap.Snaplet.Wordpress.Internal
@@ -32,22 +32,22 @@ import           Snap.Snaplet.Wordpress.Types
 import           Snap.Snaplet.Wordpress.Utils
 
 wordpressSplices :: Wordpress b
-                 -> WordpressConfig (Handler b b)
+                 -> [Field (Handler b b)]
                  -> WPLens b
                  -> Splices (Splice (Handler b b))
-wordpressSplices wp conf wpLens =
-  do "wpPosts" ## wpPostsSplice wp conf wpLens
-     "wpPostByPermalink" ## wpPostByPermalinkSplice conf wpLens
+wordpressSplices wp extraFields wpLens =
+  do "wpPosts" ## wpPostsSplice wp extraFields wpLens
+     "wpPostByPermalink" ## wpPostByPermalinkSplice extraFields wpLens
      "wpNoPostDuplicates" ## wpNoPostDuplicatesSplice wpLens
      "wp" ## wpPrefetch wp
 
 wpPostsSplice :: Wordpress b
-              -> WordpressConfig (Handler b b)
+              -> [Field (Handler b b)]
               -> WPLens b
               -> Splice (Handler b b)
-wpPostsSplice wp wpconf wpLens =
+wpPostsSplice wp extraFields wpLens =
   do promise <- newEmptyPromise
-     outputChildren <- manyWithSplices runChildren (postSplices (wpConfExtraFields wpconf))
+     outputChildren <- manyWithSplices runChildren (postSplices extraFields)
                                                    (getPromise promise)
      postsQuery <- parseQueryNode <$> getParamNode
      tagDict <- lift $ lookupTaxDict (TaxDictKey "post_tag") wp
@@ -58,7 +58,8 @@ wpPostsSplice wp wpconf wpLens =
           case (decode res) of
             Just posts -> do let postsW = extractPostIds posts
                              Wordpress{..} <- lift (use (wpLens . snapletValue))
-                             let postsND = take (qlimit postsQuery) . noDuplicates requestPostSet $ postsW
+                             let xx iset = take (qlimit postsQuery) . noDuplicates iset $ postsW
+                             postsND <- withUsedPostIds xx
                              lift $ addPostIds wpLens (map fst postsND)
                              putPromise promise (map snd postsND)
                              codeGen outputChildren
@@ -67,12 +68,12 @@ wpPostsSplice wp wpconf wpLens =
         noDuplicates Nothing = id
         noDuplicates (Just postSet) = filter (\(i,_) -> IntSet.notMember i postSet)
 
-wpPostByPermalinkSplice :: WordpressConfig (Handler b b)
+wpPostByPermalinkSplice :: [Field (Handler b b)]
                         -> WPLens b
                         -> Splice (Handler b b)
-wpPostByPermalinkSplice conf wpLens =
+wpPostByPermalinkSplice extraFields wpLens =
   do promise <- newEmptyPromise
-     outputChildren <- withSplices runChildren (postSplices (wpConfExtraFields conf)) (getPromise promise)
+     outputChildren <- withSplices runChildren (postSplices extraFields) (getPromise promise)
      return $ yieldRuntime $
        do mperma <- (parsePermalink . rqURI) <$> lift getRequest
           case mperma of

@@ -40,14 +40,15 @@ instance Default (WordpressConfig m) where
   def = WordpressConfig "http://127.0.0.1/wp-json" Nothing (CacheSeconds 600) [] Nothing
 
 data Wordpress b =
-     Wordpress { requestPostSet     :: Maybe IntSet
-               , wpExpireAggregates :: IO Bool
+     Wordpress { wpExpireAggregates :: IO Bool
                , wpExpirePost       :: WPKey -> IO Bool
                , cachingGet         :: WPKey -> IO (Maybe Text)
                , cachingGetRetry    :: WPKey -> IO Text
                , cachingGetError    :: WPKey -> IO Text
                , cacheInternals     :: WordpressInt b
                , wpLogger           :: Text -> IO ()
+               , addPostIds         :: [Int] -> IO ()
+               , withUsedPostIds    :: forall a. (IntSet -> a) -> IO a
                }
 
 type WPLens b = Lens b b (Snaplet (Wordpress b)) (Snaplet (Wordpress b))

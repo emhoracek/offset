@@ -48,14 +48,18 @@ initWordpress' wpconf heist redis wpLens =
                                , wpCacheGet = wpCacheGetInt rrunRedis (wpConfCacheBehavior wpconf)
                                , startReqMutex = startReqMutexInt active
                                , stopReqMutex = stopReqMutexInt active }
-       let wp = Wordpress{ requestPostSet = Nothing
-                         , wpExpireAggregates = wpExpireAggregatesInt rrunRedis
+       let wp = Wordpress{ wpExpireAggregates = wpExpireAggregatesInt rrunRedis
                          , wpExpirePost = wpExpirePostInt rrunRedis
                          , cachingGet = cachingGetInt wpInt
                          , cachingGetRetry = cachingGetRetryInt wpInt
                          , cachingGetError = cachingGetErrorInt wpInt
                          , cacheInternals = wpInt
                          , wpLogger = logf
+                         , preventDuplicatePosts = return ()
+                         , addPostIds = const $ return ()
+                         , withUsedPostIds = (\f -> return $ f IntSet.empty)
                          }
-       addConfig heist $ set scCompiledSplices (wordpressSplices wp wpconf wpLens) mempty
+       wrapSite (\site -> undefined >> site)
+       let extraFields = wpConfExtraFields wpconf
+       addConfig heist $ set scCompiledSplices (wordpressSplices wp extraFields wpLens) mempty
        return wp
